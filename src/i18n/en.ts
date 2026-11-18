@@ -137,6 +137,7 @@ export const en = {
   historyImport: 'Import chat history',
   historyImportSessions: 'Reading chats {done}/{total}',
   historyImportFiles: 'Writing attachments {done}/{total}',
+  historyImportPrepare: 'Checking file...',
   historyImportMerge: 'Merging data...',
   historyImportMergeProgress: 'Merging data {done}/{total}',
   historyImportCancel: 'Cancel import',

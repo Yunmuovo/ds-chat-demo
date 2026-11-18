@@ -467,3 +467,25 @@
   line-height: 20px;
   color: var(--dsw-alias-label-secondary);
 }
+
+.importProgressElapsed {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 准备/合并这类没有确切总量的阶段：用滑动条表示“还在干活” */
+.importProgressIndeterminate {
+  width: 38%;
+  animation: importSlide 1.1s ease-in-out infinite;
+}
+
+@keyframes importSlide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}

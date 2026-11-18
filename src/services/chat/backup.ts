@@ -46,8 +46,11 @@ export const exportHistory = (): Promise<{ name: string; blob: Blob }> =>
  */
 export const importHistory = (file: File, options: ImportOptions = {}): Promise<number> =>
   enqueueBackup(async () => {
+    options.onProgress?.({ stage: 'prepare', done: 0, total: 0 })
     const { checkArchiveFormat, importArchive } = await import('./history/importArchive.js')
     await checkArchiveFormat(file)
+    // 取消在准备阶段也要生效，避免排队时点了取消还在继续
+    options.signal?.throwIfAborted()
     return replaceHistory(
       () => importArchive(file, options),
       (done, total) => options.onProgress?.({ stage: 'merge', done, total })

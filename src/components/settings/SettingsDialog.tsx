@@ -317,7 +317,7 @@ const TtsVoiceSetting = () => {
 }
 
 /** 覆盖导入的二次确认，叠在设置弹窗上 */
-/** 导入中：显示阶段进度并可取消；取消只会中断本次导入，原有数据不受影响。 */
+/** 导入中：分阶段显示进度与已用时间，可取消；取消不会破坏原有数据。 */
 const ImportProgressModal = ({
   historyImport,
 }: {
@@ -325,19 +325,28 @@ const ImportProgressModal = ({
 }) => {
   const t = useTranslate()
   const { progress } = historyImport
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const stage = progress?.stage ?? 'prepare'
   const percent =
     progress && progress.total > 0
       ? Math.min(100, Math.round((progress.done / progress.total) * 100))
       : 0
-  const label = !progress
-    ? t('historyImportMerge')
-    : progress.stage === 'sessions'
-      ? t('historyImportSessions', { done: progress.done, total: progress.total })
-      : progress.stage === 'files'
-        ? t('historyImportFiles', { done: progress.done, total: progress.total })
-        : progress.total > 0
-          ? t('historyImportMergeProgress', { done: progress.done, total: progress.total })
-          : t('historyImportMerge')
+  const text =
+    stage === 'sessions'
+      ? t('historyImportSessions', { done: progress?.done ?? 0, total: progress?.total ?? 0 })
+      : stage === 'files'
+        ? t('historyImportFiles', { done: progress?.done ?? 0, total: progress?.total ?? 0 })
+        : stage === 'merge'
+          ? (progress?.total ?? 0) > 0
+            ? t('historyImportMergeProgress', { done: progress?.done ?? 0, total: progress?.total ?? 0 })
+            : t('historyImportMerge')
+          : t('historyImportPrepare')
 
   return (
     <Modal
@@ -352,12 +361,19 @@ const ImportProgressModal = ({
     >
       <div className={styles.importProgress}>
         <div className={styles.importProgressTrack}>
-          <div
-            className={styles.importProgressFill}
-            style={{ width: `${progress?.stage === 'merge' ? 100 : percent}%` }}
-          />
+          {stage === 'prepare' || (stage === 'merge' && (progress?.total ?? 0) === 0) ? (
+            <div className={clsx(styles.importProgressFill, styles.importProgressIndeterminate)} />
+          ) : (
+            <div
+              className={styles.importProgressFill}
+              style={{ width: `${stage === 'merge' ? 100 : percent}%` }}
+            />
+          )}
         </div>
-        <div className={styles.importProgressText}>{label}</div>
+        <div className={styles.importProgressText}>
+          {text}
+          <span className={styles.importProgressElapsed}>{elapsed}s</span>
+        </div>
       </div>
     </Modal>
   )
@@ -495,18 +511,19 @@ const useImportProgress = () => {
     if (frame.current) {
       return
     }
-    frame.current = requestAnimationFrame(() => {
+    // 用定时器而不是 rAF：WebView 里 rAF 可能被节流，进度会一直不刷新
+    frame.current = window.setTimeout(() => {
       frame.current = 0
       if (pending.current) {
         setProgress(pending.current)
       }
-    })
+    }, 80)
   }, [])
 
   useEffect(
     () => () => {
       if (frame.current) {
-        cancelAnimationFrame(frame.current)
+        window.clearTimeout(frame.current)
       }
     },
     []
@@ -534,6 +551,7 @@ const useHistoryImport = () => {
     setStatus(null)
     const controller = new AbortController()
     abortRef.current = controller
+    onProgress({ stage: 'prepare', done: 0, total: 0 })
     try {
       const count = await importHistory(file, { onProgress, signal: controller.signal })
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })

@@ -131,6 +131,7 @@ export const zh = {
   historyImport: '导入历史对话',
   historyImportSessions: '正在读取对话 {done}/{total}',
   historyImportFiles: '正在写入附件 {done}/{total}',
+  historyImportPrepare: '正在检查文件…',
   historyImportMerge: '正在合并数据…',
   historyImportMergeProgress: '正在合并数据 {done}/{total}',
   historyImportCancel: '取消导入',

@@ -17,7 +17,7 @@ import {
 } from './zipReader.js'
 
 /** 导入阶段：读会话 → 写附件 → 合并进正式库 */
-export type ImportStage = 'sessions' | 'files' | 'merge'
+export type ImportStage = 'prepare' | 'sessions' | 'files' | 'merge'
 
 export type ImportProgress = {
   stage: ImportStage

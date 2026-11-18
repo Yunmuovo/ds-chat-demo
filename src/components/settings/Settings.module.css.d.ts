@@ -14,6 +14,8 @@ declare const styles: {
   readonly "importProgressTrack": string;
   readonly "importProgressFill": string;
   readonly "importProgressText": string;
+  readonly "importProgressElapsed": string;
+  readonly "importProgressIndeterminate": string;
   readonly "locationCell": string;
   readonly "locationSelectors": string;
   readonly "provinceSelect": string;
