@@ -48,7 +48,10 @@ export const importHistory = (file: File, options: ImportOptions = {}): Promise<
   enqueueBackup(async () => {
     const { checkArchiveFormat, importArchive } = await import('./history/importArchive.js')
     await checkArchiveFormat(file)
-    return replaceHistory(() => importArchive(file, options))
+    return replaceHistory(
+      () => importArchive(file, options),
+      (done, total) => options.onProgress?.({ stage: 'merge', done, total })
+    )
   })
 
 /** 确认删除后调用：以空历史原子替换全部本地会话与附件，保留 API Key 和其他设置。 */

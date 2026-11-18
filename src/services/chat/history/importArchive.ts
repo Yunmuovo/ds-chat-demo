@@ -224,6 +224,7 @@ export const importArchive = async (
   ) {
     fail('backupIncomplete')
   }
-  onProgress?.({ stage: 'merge', done: total, total })
+  // 进入合并阶段：真实进度由 commitStaging 逐步上报
+  onProgress?.({ stage: 'merge', done: 0, total: 0 })
   return stored
 }

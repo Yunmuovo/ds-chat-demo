@@ -335,7 +335,9 @@ const ImportProgressModal = ({
       ? t('historyImportSessions', { done: progress.done, total: progress.total })
       : progress.stage === 'files'
         ? t('historyImportFiles', { done: progress.done, total: progress.total })
-        : t('historyImportMerge')
+        : progress.total > 0
+          ? t('historyImportMergeProgress', { done: progress.done, total: progress.total })
+          : t('historyImportMerge')
 
   return (
     <Modal

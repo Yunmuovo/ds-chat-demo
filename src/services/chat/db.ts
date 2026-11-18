@@ -231,8 +231,12 @@ const withFileTypes =
     return changed ? { ...session, messages } : session
   }
 
+/** 合并阶段的进度回调：done/total 为已复制条目数 */
+export type StageProgress = (done: number, total: number) => void
+
 export const commitStaging = async (
-  fileTypes?: ReadonlyMap<string, string>
+  fileTypes?: ReadonlyMap<string, string>,
+  onProgress?: StageProgress
 ): Promise<SessionSummary[]> => {
   const summaries: SessionSummary[] = []
   const patchTypes = withFileTypes(fileTypes)
@@ -247,20 +251,25 @@ export const commitStaging = async (
       if (to === 'sessions') {
         await tx.objectStore('sessionSummaries').clear()
       }
-      for (
-        let cursor = await tx.objectStore(from).openCursor();
-        cursor;
-        cursor = await cursor.continue()
-      ) {
+      const source = tx.objectStore(from)
+      const total = await source.count()
+      let done = 0
+      for (let cursor = await source.openCursor(); cursor; cursor = await cursor.continue()) {
         const value = to === 'sessions' ? patchTypes(cursor.value as Session) : cursor.value
-        await target.put(value)
+        // 不逐条 await：请求在事务里排队，等 tx.done 一起提交，
+        // 否则每条记录都要等一次数据库往返，数据量大时会像卡死。
+        target.put(value)
         if (to === 'sessions') {
           const summary = storedSummary(value as Session)
-          await tx.objectStore('sessionSummaries').put(summary)
+          tx.objectStore('sessionSummaries').put(summary)
           summaries.push(toSessionSummary(summary))
         }
+        done += 1
+        if (done === total || done % 20 === 0) {
+          onProgress?.(done, total)
+        }
       }
-      await tx.objectStore(from).clear()
+      await source.clear()
     } catch (error) {
       // 同步抛出的错误不会让事务自动回滚，需显式中止，避免只提交清空和部分移入。
       abortTransaction(tx)

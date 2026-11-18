@@ -394,7 +394,8 @@ const waitForIdle = (sessionId?: string) =>
  * 期间停止生成并禁止修改会话；失败时清除暂存，保留原有记录。
  */
 export const replaceHistory = async (
-  write: () => Promise<Map<string, string> | undefined>
+  write: () => Promise<Map<string, string> | undefined>,
+  onMergeProgress?: db.StageProgress
 ): Promise<number> => {
   if (get().importingHistory) {
     throw new Error('History replacement is already in progress')
@@ -414,7 +415,10 @@ export const replaceHistory = async (
     let summaries: SessionSummary[]
     try {
       const fileTypes = await write()
-      summaries = await db.commitStaging(fileTypes instanceof Map ? fileTypes : undefined)
+      summaries = await db.commitStaging(
+        fileTypes instanceof Map ? fileTypes : undefined,
+        onMergeProgress
+      )
     } catch (error) {
       await db.clearStaging().catch(db.reportStorageError('clear unfinished history replacement'))
       throw error
