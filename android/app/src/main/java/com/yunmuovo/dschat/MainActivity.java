@@ -9,6 +9,8 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -47,6 +49,8 @@ public class MainActivity extends Activity {
     private WebView webView;
     private FrameLayout splash;
     private TextView splashText;
+    private ImageView splashIcon;
+    private final Handler splashHandler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> fileCallback;
     private FileSaver fileSaver;
 
@@ -81,6 +85,8 @@ public class MainActivity extends Activity {
         settings.setBuiltInZoomControls(false);
         // 跟随页面的 viewport 布局；字号仍跟随系统设置（无障碍），
         // 界面在字号变大时会自动缩成短标签，而不是丢掉文字。
+        // 优先用缓存：清过缓存后第一次仍需联网，之后打开基本秒开
+        settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         // 深浅色由页面 CSS 自己处理，别让 WebView 再做算法暗化，否则颜色会被二次反转
@@ -195,24 +201,51 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 加载中只盖一层纯色底：logo 淡入与重合由页面自己完成（位置才能精确对齐），
-     * 这里只负责避免白屏闪烁。
+     * 冷启动遮罩：先只有底色，稍后淡入 logo，超过 1.2 秒才提示「正在加载…」。
+     * 正常网速下几乎看不到，网络慢时也不会像卡死。
      */
     private FrameLayout buildSplash() {
         FrameLayout box = new FrameLayout(this);
         box.setBackgroundColor(isSystemDark() ? Color.parseColor("#16171C") : Color.parseColor("#F7F8FA"));
+        float density = getResources().getDisplayMetrics().density;
+
+        splashIcon = new ImageView(this);
+        splashIcon.setImageResource(R.mipmap.ic_launcher);
+        splashIcon.setAlpha(0f);
+        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(
+                (int) (56 * density), (int) (56 * density));
+        iconParams.gravity = Gravity.CENTER;
+        box.addView(splashIcon, iconParams);
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
 
         splashText = new TextView(this);
-        splashText.setTextColor(Color.parseColor("#4D6BFE"));
+        splashText.setTextColor(Color.parseColor("#8A8F99"));
         splashText.setTextSize(13);
         splashText.setGravity(Gravity.CENTER);
         splashText.setVisibility(View.GONE);
-        FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(
+        column.addView(splashText);
+
+        FrameLayout.LayoutParams columnParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        textParams.gravity = Gravity.CENTER;
-        textParams.leftMargin = (int) (32 * getResources().getDisplayMetrics().density);
-        textParams.rightMargin = textParams.leftMargin;
-        box.addView(splashText, textParams);
+        columnParams.gravity = Gravity.CENTER;
+        columnParams.topMargin = (int) (96 * density);
+        box.addView(column, columnParams);
+
+        splashHandler.postDelayed(() -> {
+            if (splash != null && splash.getVisibility() == View.VISIBLE) {
+                splashIcon.animate().alpha(1f).setDuration(420).start();
+            }
+        }, 260);
+        splashHandler.postDelayed(() -> {
+            if (splash == null || splash.getVisibility() != View.VISIBLE) {
+                return;
+            }
+            splashText.setText("正在加载…");
+            splashText.setVisibility(View.VISIBLE);
+        }, 1200);
         return box;
     }
 
@@ -222,6 +255,7 @@ public class MainActivity extends Activity {
     }
 
     private void hideSplash() {
+        splashHandler.removeCallbacksAndMessages(null);
         if (splash == null || splash.getVisibility() != View.VISIBLE) {
             return;
         }
@@ -240,6 +274,9 @@ public class MainActivity extends Activity {
         splash.setVisibility(View.VISIBLE);
         splash.setAlpha(1f);
         splash.clearAnimation();
+        if (splashIcon != null) {
+            splashIcon.setVisibility(View.GONE);
+        }
         if (splashText != null) {
             splashText.setVisibility(View.VISIBLE);
             splashText.setText(message + "\n\n轻触屏幕重试");
@@ -250,6 +287,10 @@ public class MainActivity extends Activity {
         splash.setOnClickListener(v -> {
             if (splashText != null) {
                 splashText.setVisibility(View.GONE);
+            }
+            if (splashIcon != null) {
+                splashIcon.setVisibility(View.VISIBLE);
+                splashIcon.setAlpha(1f);
             }
             splash.setOnClickListener(null);
             webView.loadUrl(homeUrl());
