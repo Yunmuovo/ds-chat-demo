@@ -62,6 +62,12 @@ bash build.sh   # 构建 + 部署到手机目录 + 同步 docs/
 - 默认 debug 签名，可直接安装（需允许“未知来源”）
 - 更换图标：替换 `android/app/src/main/res/mipmap-*/ic_launcher.png`
 
+### 2.0.0（纪念版）
+
+- Image viewer: pinch to zoom, drag to pan, double tap to toggle zoom, wheel zoom on desktop
+- New splash: logo fades in place, breathes, then the whole screen fades out
+- Cold start: logo appears after 260ms, "loading" hint only after 1.2s, cache-first WebView
+
 ### 签名与升级
 
 APK 用固定密钥签名（`android/keystore.jks`，由 CI 首次构建时生成并提交），
