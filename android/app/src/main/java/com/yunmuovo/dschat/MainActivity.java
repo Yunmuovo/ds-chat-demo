@@ -210,10 +210,11 @@ public class MainActivity extends Activity {
         float density = getResources().getDisplayMetrics().density;
 
         splashIcon = new ImageView(this);
-        splashIcon.setImageResource(R.mipmap.ic_launcher);
+        // 用透明底的鲸鱼图形，避免图标自带的深色方块和开屏底色不一致
+        splashIcon.setImageResource(R.drawable.splash_logo);
         splashIcon.setAlpha(0f);
         FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(
-                (int) (56 * density), (int) (56 * density));
+                (int) (44 * density), (int) (44 * density));
         iconParams.gravity = Gravity.CENTER;
         box.addView(splashIcon, iconParams);
 
@@ -231,7 +232,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams columnParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
         columnParams.gravity = Gravity.CENTER;
-        columnParams.topMargin = (int) (96 * density);
+        columnParams.topMargin = (int) (72 * density);
         box.addView(column, columnParams);
 
         splashHandler.postDelayed(() -> {
