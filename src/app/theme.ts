@@ -5,12 +5,42 @@ export type Theme = 'light' | 'dark'
 
 const query = window.matchMedia('(prefers-color-scheme: dark)')
 
-const subscribeOsTheme = (listener: () => void) => {
-  query.addEventListener('change', listener)
-  return () => query.removeEventListener('change', listener)
+/**
+ * APK 外壳里 WebView 的 prefers-color-scheme 跟随的是 App 的 uiMode 而不是系统，
+ * 所以由外壳在系统深浅色变化时通过这个钩子直接告知页面；网页版没有这个钩子。
+ */
+let nativeDark: boolean | null = null
+const nativeListeners = new Set<() => void>()
+
+declare global {
+  interface Window {
+    __dsSetSystemDark?: (dark: boolean) => void
+  }
 }
 
-const getOsTheme = (): Theme => (query.matches ? 'dark' : 'light')
+window.__dsSetSystemDark = (dark: boolean) => {
+  nativeDark = dark
+  for (const listener of nativeListeners) {
+    listener()
+  }
+  syncTheme()
+}
+
+const subscribeOsTheme = (listener: () => void) => {
+  query.addEventListener('change', listener)
+  nativeListeners.add(listener)
+  return () => {
+    query.removeEventListener('change', listener)
+    nativeListeners.delete(listener)
+  }
+}
+
+const getOsTheme = (): Theme => {
+  if (nativeDark !== null) {
+    return nativeDark ? 'dark' : 'light'
+  }
+  return query.matches ? 'dark' : 'light'
+}
 
 const resolveTheme = (preference: ThemePreference, osTheme: Theme): Theme =>
   preference === 'system' ? osTheme : preference

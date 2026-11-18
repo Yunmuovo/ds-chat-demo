@@ -10,8 +10,8 @@ android {
         applicationId = "com.yunmuovo.dschat"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
     }
 
     // 固定签名：密钥由 CI 首次构建时生成并提交，保证后续版本可以覆盖安装

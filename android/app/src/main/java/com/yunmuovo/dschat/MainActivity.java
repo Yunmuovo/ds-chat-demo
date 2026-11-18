@@ -3,9 +3,11 @@ package com.yunmuovo.dschat;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -76,6 +78,12 @@ public class MainActivity extends Activity {
         // 界面在字号变大时会自动缩成短标签，而不是丢掉文字。
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
+        // 深浅色由页面 CSS 自己处理，别让 WebView 再做算法暗化，否则颜色会被二次反转
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            settings.setAlgorithmicDarkeningAllowed(false);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            settings.setForceDark(WebSettings.FORCE_DARK_OFF);
+        }
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -93,6 +101,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 hideSplash();
+                pushSystemTheme();
             }
 
             @Override
@@ -153,6 +162,24 @@ public class MainActivity extends Activity {
             webView.restoreState(savedInstanceState);
             hideSplash();
         }
+    }
+
+    /** 把系统深浅色推给页面：WebView 的 prefers-color-scheme 不跟随系统 */
+    private void pushSystemTheme() {
+        if (webView == null) {
+            return;
+        }
+        boolean dark = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        webView.evaluateJavascript(
+                "window.__dsSetSystemDark&&window.__dsSetSystemDark(" + dark + ")", null);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 声明了 configChanges=uiMode，系统不会重建 Activity，这里主动同步主题
+        pushSystemTheme();
     }
 
     /** 加载中盖一层：鲸鱼图标 + 转圈 + 文案，避免白屏让人以为卡住 */
