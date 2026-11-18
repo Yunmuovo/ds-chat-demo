@@ -1,8 +1,10 @@
 package com.yunmuovo.dschat;
 
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -67,6 +69,7 @@ public class FileSaver {
                 values.put(MediaStore.Downloads.IS_PENDING, 0);
                 resolver.update(uri, values, null, null);
                 toast("已保存到「下载」：" + name);
+                showActions(uri, mime, name);
             } else {
                 File dir = new File(Environment.getExternalStoragePublicDirectory(
                         Environment.DIRECTORY_DOWNLOADS), "");
@@ -82,6 +85,24 @@ public class FileSaver {
         } catch (Exception error) {
             toast("导出失败：" + error.getClass().getSimpleName());
         }
+    }
+
+    /** 导出成功后直接弹出系统的分享/发送面板，省得去文件管理器里翻 */
+    private void showActions(Uri uri, String mime, String name) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType(mime);
+            share.putExtra(Intent.EXTRA_STREAM, uri);
+            share.putExtra(Intent.EXTRA_SUBJECT, name);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(share, "导出完成：" + name);
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                context.startActivity(chooser);
+            } catch (ActivityNotFoundException | SecurityException error) {
+                toast("文件已保存，但没有可分享的应用");
+            }
+        });
     }
 
     /** 只保留文件名，去掉路径分隔符等危险字符 */
