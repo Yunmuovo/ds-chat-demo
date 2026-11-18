@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>DeepSeek</title>
+  </head>
+  <body>
+    <script>
+      /* Chrome 109 及更早内核缺少 ES2023 的这几个数组方法，缺失时发送会直接报「上传失败」 */
+      (function () {
+        var p = Array.prototype
+        if (!p.toReversed) {
+          p.toReversed = function () {
+            return Array.prototype.slice.call(this).reverse()
+          }
+        }
+        if (!p.toSorted) {
+          p.toSorted = function (compare) {
+            return Array.prototype.slice.call(this).sort(compare)
+          }
+        }
+        if (!p.toSpliced) {
+          p.toSpliced = function () {
+            var copy = Array.prototype.slice.call(this)
+            copy.splice.apply(copy, arguments)
+            return copy
+          }
+        }
+      })()
+    </script>
+    <div id="root"></div>
+  </body>
+</html>
