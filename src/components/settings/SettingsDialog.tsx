@@ -636,12 +636,33 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   const empty = useChatStore((state) => state.sessions.length === 0)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const lastPaint = useRef(0)
 
   const onExport = async () => {
     setBusy(true)
     setStatus(null)
+    setProgress({ done: 0, total: 0 })
     try {
-      const { name, blob } = await exportHistory()
+      const { name, blob } = await exportHistory((done, total) => {
+        // 导出可能上千个会话，节流到每 120ms 一次，避免拖慢打包
+        const now = Date.now()
+        if (done === total || now - lastPaint.current > 120) {
+          lastPaint.current = now
+          setProgress({ done, total })
+        }
+      })
+      // 在 APK（WebView）里，blob 链接不会被下载，改为交给原生保存
+      const saver = (window as unknown as { AndroidSaver?: { save(n: string, m: string, d: string): void } })
+        .AndroidSaver
+      if (saver?.save) {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          saver.save(name, blob.type || 'application/zip', String(reader.result))
+        }
+        reader.readAsDataURL(blob)
+        return
+      }
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -652,10 +673,35 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
       setStatus(errorStatus('historyExportFailed', error))
     } finally {
       setBusy(false)
+      setProgress(null)
     }
   }
 
   return (
+    <>
+      {busy ? (
+        <Modal title={t('exportAllLabel')} className={styles.importConfirm} onClose={() => {}}>
+          <div className={styles.importProgress}>
+            <div className={styles.importProgressTrack}>
+              {progress && progress.total > 0 ? (
+                <div
+                  className={styles.importProgressFill}
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              ) : (
+                <div
+                  className={clsx(styles.importProgressFill, styles.importProgressIndeterminate)}
+                />
+              )}
+            </div>
+            <div className={styles.importProgressText}>
+              {progress && progress.total > 0
+                ? t('historyExportProgress', { done: progress.done, total: progress.total })
+                : t('historyExporting')}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     <SettingCell
       label={t('exportAllLabel')}
       description={t('historyExportDescription')}
@@ -673,5 +719,6 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
         </Button>
       }
     />
+    </>
   )
 }

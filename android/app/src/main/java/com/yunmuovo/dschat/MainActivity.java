@@ -132,8 +132,20 @@ public class MainActivity extends Activity {
             }
         });
 
-        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) ->
-                openExternally(Uri.parse(url)));
+        // 网页导出的 ZIP 是 blob: 链接，WebView 不会自己下载，交给页面转成 base64 再保存
+        webView.addJavascriptInterface(new FileSaver(this), "AndroidSaver");
+
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) -> {
+            if (url != null && url.startsWith("blob:")) {
+                startBlobDownload(url, mimeType, fileNameFromDisposition(contentDisposition));
+                return;
+            }
+            if (url != null && url.startsWith("data:")) {
+                new FileSaver(this).save("deepseek_data.zip", mimeType, url);
+                return;
+            }
+            openExternally(Uri.parse(url));
+        });
 
         if (savedInstanceState == null) {
             webView.loadUrl(HOME_URL);
@@ -220,6 +232,56 @@ public class MainActivity extends Activity {
             splash.setOnClickListener(null);
             webView.loadUrl(HOME_URL);
         });
+    }
+
+    /** 让页面把 blob 读成 dataURL，再通过 AndroidSaver 写入下载目录 */
+    private void startBlobDownload(String blobUrl, String mimeType, String fileName) {
+        String js = "(function(){var x=new XMLHttpRequest();x.open('GET',"
+                + quote(blobUrl) + ",true);x.responseType='blob';"
+                + "x.onload=function(){var r=new FileReader();"
+                + "r.onloadend=function(){AndroidSaver.save(" + quote(fileName) + ","
+                + quote(mimeType == null ? "application/zip" : mimeType)
+                + ",String(r.result));};r.readAsDataURL(x.response);};"
+                + "x.onerror=function(){AndroidSaver.save(" + quote(fileName)
+                + ",'application/zip','data:,');};x.send();})()";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /** JAVA/JS 字符串转义 */
+    private static String quote(String value) {
+        StringBuilder out = new StringBuilder("\"");
+        for (char c : (value == null ? "" : value).toCharArray()) {
+            switch (c) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.append("\"").toString();
+    }
+
+    /** 从 Content-Disposition 里取文件名，取不到时用默认名 */
+    private static String fileNameFromDisposition(String disposition) {
+        if (disposition != null) {
+            for (String part : disposition.split(";")) {
+                String trimmed = part.trim();
+                if (trimmed.startsWith("filename=")) {
+                    String name = trimmed.substring("filename=".length()).replace("\"", "").trim();
+                    if (!name.isEmpty()) {
+                        return name;
+                    }
+                }
+            }
+        }
+        return "deepseek_data.zip";
     }
 
     /** 用系统浏览器打开外部链接与下载 */
