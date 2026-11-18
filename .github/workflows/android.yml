@@ -29,6 +29,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      # 首次运行生成固定签名密钥并提交；之后所有版本共用，升级才能覆盖安装
+      - name: Ensure stable signing key
+        run: |
+          if [ ! -f android/keystore.jks ]; then
+            keytool -genkeypair -v -storetype PKCS12 -keystore android/keystore.jks \
+              -alias dschat -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass dschat2024 -keypass dschat2024 \
+              -dname "CN=DeepSeek Chat Demo, OU=Yunmuovo, O=Yunmuovo, C=CN"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add android/keystore.jks
+            git commit -m "chore: 生成固定签名密钥 [skip ci]"
+            git push
+          else
+            echo "已存在签名密钥，直接复用"
+          fi
+
       - name: Build debug APK
         run: gradle -p android assembleDebug --no-daemon --stacktrace
 

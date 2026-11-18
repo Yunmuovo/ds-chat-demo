@@ -61,3 +61,9 @@ bash build.sh   # 构建 + 部署到手机目录 + 同步 docs/
 - 站点地址写在 `android/app/src/main/java/com/yunmuovo/dschat/MainActivity.java` 的 `HOME_URL`
 - 默认 debug 签名，可直接安装（需允许“未知来源”）
 - 更换图标：替换 `android/app/src/main/res/mipmap-*/ic_launcher.png`
+
+### 签名与升级
+
+APK 用固定密钥签名（`android/keystore.jks`，由 CI 首次构建时生成并提交），
+因此后续版本可以直接覆盖安装。**首次从「每次构建随机签名」的旧版切换过来时，
+需要卸载旧版一次**，否则会提示“与已安装应用签名不同”。

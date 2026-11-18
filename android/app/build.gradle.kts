@@ -10,13 +10,29 @@ android {
         applicationId = "com.yunmuovo.dschat"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
+    }
+
+    // 固定签名：密钥由 CI 首次构建时生成并提交，保证后续版本可以覆盖安装
+    signingConfigs {
+        if (file("keystore.jks").exists()) {
+            create("stable") {
+                storeFile = file("keystore.jks")
+                storePassword = "dschat2024"
+                keyAlias = "dschat"
+                keyPassword = "dschat2024"
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfigs.findByName("stable")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("stable")?.let { signingConfig = it }
         }
     }
 
