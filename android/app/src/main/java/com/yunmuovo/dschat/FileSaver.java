@@ -1,132 +1,87 @@
 package com.yunmuovo.dschat;
 
-import android.content.ActivityNotFoundException;
-import android.content.ContentResolver;
-import android.content.ContentValues;
-import android.content.Context;
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.DocumentsContract;
-import android.provider.MediaStore;
 import android.util.Base64;
-import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 /**
- * 接收网页生成的 blob（dataURL 形式）并写入「下载」目录。
- * WebView 不会自动下载 blob: 链接，所以由页面把内容读成 base64 再交给这里保存。
+ * 接收网页生成的 blob（dataURL 形式），用系统「保存到…」对话框让用户选择位置写入。
+ * 相比直接写公共下载目录，SAF 不受各家 ROM 的存储策略影响，用户也能自己选文件夹。
  */
 public class FileSaver {
 
-    private final Context context;
+    static final int REQUEST_SAVE_FILE = 2001;
 
-    public FileSaver(Context context) {
-        this.context = context.getApplicationContext();
+    private final Activity activity;
+    private byte[] pendingBytes;
+    private String pendingName = "deepseek_data.zip";
+
+    public FileSaver(Activity activity) {
+        this.activity = activity;
     }
 
     private void toast(String message) {
         new Handler(Looper.getMainLooper()).post(
-                () -> Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+                () -> Toast.makeText(activity, message, Toast.LENGTH_LONG).show());
     }
 
-    /** 页面用来报告进度的轻量日志，直接弹 toast，方便定位导出卡在哪一步 */
-    @JavascriptInterface
+    /** 页面用来报告进度的轻量日志，直接弹 toast，便于定位导出卡在哪一步 */
+    @android.webkit.JavascriptInterface
     public void log(String message) {
         toast("[导出] " + message);
     }
 
-    @JavascriptInterface
+    @android.webkit.JavascriptInterface
     public void save(String fileName, String mimeType, String dataUrl) {
         try {
-            int comma = dataUrl.indexOf(',');
+            int comma = dataUrl == null ? -1 : dataUrl.indexOf(',');
             if (comma < 0) {
                 toast("导出失败：数据不完整");
                 return;
             }
-            byte[] bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
-            String name = sanitize(fileName);
+            pendingBytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
+            pendingName = sanitize(fileName);
             String mime = mimeType == null || mimeType.isEmpty() ? "application/zip" : mimeType;
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Downloads.DISPLAY_NAME, name);
-                values.put(MediaStore.Downloads.MIME_TYPE, mime);
-                values.put(MediaStore.Downloads.IS_PENDING, 1);
-                ContentResolver resolver = context.getContentResolver();
-                Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (uri == null) {
-                    toast("导出失败：无法写入下载目录");
-                    return;
-                }
-                try (OutputStream out = resolver.openOutputStream(uri)) {
-                    if (out == null) {
-                        throw new IllegalStateException("openOutputStream returned null");
-                    }
-                    out.write(bytes);
-                }
-                values.clear();
-                values.put(MediaStore.Downloads.IS_PENDING, 0);
-                resolver.update(uri, values, null, null);
-                toast("已保存到「下载」：" + name);
-                openDownloadsFolder(name);
-                showActions(uri, mime, name);
-            } else {
-                File dir = new File(Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS), "");
-                if (!dir.exists() && !dir.mkdirs()) {
-                    dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                }
-                File target = new File(dir, name);
-                try (FileOutputStream out = new FileOutputStream(target)) {
-                    out.write(bytes);
-                }
-                toast("已保存到：" + target.getAbsolutePath());
-            }
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType(mime);
+            intent.putExtra(Intent.EXTRA_TITLE, pendingName);
+            activity.startActivityForResult(intent, REQUEST_SAVE_FILE);
         } catch (Exception error) {
             toast("导出失败：" + error.getClass().getSimpleName());
         }
     }
 
-    /** 尽力打开系统「下载」目录；打不开就保留 toast 提示 */
-    private void openDownloadsFolder(String name) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            Uri folder = Uri.parse(
-                    "content://com.android.externalstorage.documents/document/primary%3ADownload");
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(folder, DocumentsContract.Document.MIME_TYPE_DIR);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                context.startActivity(intent);
+    /** 由 Activity 在 onActivityResult 里回调 */
+    void onResult(int resultCode, Intent data) {
+        byte[] bytes = pendingBytes;
+        pendingBytes = null;
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            toast("已取消保存");
+            return;
+        }
+        Uri target = data.getData();
+        if (bytes == null) {
+            toast("导出失败：没有待保存的内容");
+            return;
+        }
+        new Thread(() -> {
+            try (OutputStream out = activity.getContentResolver().openOutputStream(target)) {
+                if (out == null) {
+                    throw new IllegalStateException("openOutputStream returned null");
+                }
+                out.write(bytes);
+                toast("已保存：" + pendingName);
             } catch (Exception error) {
-                toast("文件已保存到「下载」：" + name);
+                toast("保存失败：" + error.getClass().getSimpleName());
             }
-        });
-    }
-
-    /** 导出成功后直接弹出系统的分享/发送面板，省得去文件管理器里翻 */
-    private void showActions(Uri uri, String mime, String name) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            Intent share = new Intent(Intent.ACTION_SEND);
-            share.setType(mime);
-            share.putExtra(Intent.EXTRA_STREAM, uri);
-            share.putExtra(Intent.EXTRA_SUBJECT, name);
-            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            Intent chooser = Intent.createChooser(share, "导出完成：" + name);
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                context.startActivity(chooser);
-            } catch (ActivityNotFoundException | SecurityException error) {
-                toast("文件已保存，但没有可分享的应用");
-            }
-        });
+        }).start();
     }
 
     /** 只保留文件名，去掉路径分隔符等危险字符 */

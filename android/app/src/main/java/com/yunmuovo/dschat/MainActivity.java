@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private TextView splashText;
     private ProgressBar splashBar;
     private ValueCallback<Uri[]> fileCallback;
+    private FileSaver fileSaver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -148,7 +149,8 @@ public class MainActivity extends Activity {
         });
 
         // 网页导出的 ZIP 是 blob: 链接，WebView 不会自己下载，交给页面转成 base64 再保存
-        webView.addJavascriptInterface(new FileSaver(this), "AndroidSaver");
+        fileSaver = new FileSaver(this);
+        webView.addJavascriptInterface(fileSaver, "AndroidSaver");
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) -> {
             if (url != null && url.startsWith("blob:")) {
@@ -156,7 +158,7 @@ public class MainActivity extends Activity {
                 return;
             }
             if (url != null && url.startsWith("data:")) {
-                new FileSaver(this).save("deepseek_data.zip", mimeType, url);
+                fileSaver.save("deepseek_data.zip", mimeType, url);
                 return;
             }
             openExternally(Uri.parse(url));
@@ -329,6 +331,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == FileSaver.REQUEST_SAVE_FILE) {
+            if (fileSaver != null) {
+                fileSaver.onResult(resultCode, data);
+            }
+            return;
+        }
         if (requestCode != REQUEST_FILE_CHOOSER || fileCallback == null) {
             return;
         }
