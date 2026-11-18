@@ -117,6 +117,10 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   ) {
     invalid()
   }
+  // 一次读完整个中央目录：按条目逐条读会变成 3N 次磁盘访问，
+  // 条目多时（进度条还停在准备阶段）会卡上几十秒。
+  const data = await readBytes(file, offset, size)
+  const view = viewOf(data)
   const entries: Entry[] = []
   const paths = new Set<string>()
   let cursor = 0
@@ -124,18 +128,17 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     if (cursor + 46 > size) {
       invalid()
     }
-    const view = viewOf(await readBytes(file, offset + cursor, 46))
-    if (view.getUint32(0, true) !== 0x02014b50) {
+    if (view.getUint32(cursor, true) !== 0x02014b50) {
       invalid()
     }
-    const flags = view.getUint16(8, true)
-    const method = view.getUint16(10, true)
-    const compressedSize = view.getUint32(20, true)
-    const entrySize = view.getUint32(24, true)
-    const nameLength = view.getUint16(28, true)
-    const extraLength = view.getUint16(30, true)
-    const next = cursor + 46 + nameLength + extraLength + view.getUint16(32, true)
-    const entryOffset = view.getUint32(42, true)
+    const flags = view.getUint16(cursor + 8, true)
+    const method = view.getUint16(cursor + 10, true)
+    const compressedSize = view.getUint32(cursor + 20, true)
+    const entrySize = view.getUint32(cursor + 24, true)
+    const nameLength = view.getUint16(cursor + 28, true)
+    const extraLength = view.getUint16(cursor + 30, true)
+    const next = cursor + 46 + nameLength + extraLength + view.getUint16(cursor + 32, true)
+    const entryOffset = view.getUint32(cursor + 42, true)
     // 只允许 deflate 选项、data descriptor 与 UTF-8 标志。
     if (
       flags & ~0x80e ||
@@ -144,13 +147,14 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
       entrySize === 0xffffffff ||
       (method === 0 && compressedSize !== entrySize) ||
       entryOffset >= offset ||
-      view.getUint16(34, true) !== 0 ||
-      ((view.getUint32(38, true) >>> 16) & 0xf000) === 0xa000 ||
+      view.getUint16(cursor + 34, true) !== 0 ||
+      ((view.getUint32(cursor + 38, true) >>> 16) & 0xf000) === 0xa000 ||
       next > size
     ) {
       invalid()
     }
-    const name = await readBytes(file, offset + cursor + 46, nameLength)
+    const nameStart = cursor + 46
+    const name = data.subarray(nameStart, nameStart + nameLength)
     const path = decodePath(name, flags)
     // 目录和同名文件也不能互相覆盖。
     const identity = path.endsWith('/') ? path.slice(0, -1) : path
@@ -158,13 +162,13 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
       invalid()
     }
     paths.add(identity)
-    checkExtra(await readBytes(file, offset + cursor + 46 + nameLength, extraLength))
+    checkExtra(data.subarray(nameStart + nameLength, nameStart + nameLength + extraLength))
     entries.push({
       path,
       name,
       flags,
       method,
-      crc: view.getUint32(16, true),
+      crc: view.getUint32(cursor + 16, true),
       compressedSize,
       size: entrySize,
       offset: entryOffset,
@@ -177,20 +181,34 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   return { entries: entries.sort((a, b) => a.offset - b.offset), offset }
 }
 
+/** 同一份归档会被格式检查、条目计数和正式读取各调用一次，目录只解析一遍 */
+const directoryCache = new WeakMap<File, Promise<{ entries: Entry[]; offset: number }>>()
+
+const readDirectoryCached = (file: File) => {
+  const cached = directoryCache.get(file)
+  if (cached) {
+    return cached
+  }
+  const task = readDirectory(file)
+  directoryCache.set(file, task)
+  return task
+}
+
 const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
-  if (entry.offset + 30 > boundary) {
+  const nameLength = entry.name.length
+  // 本地头 + 文件名一次读完，避免每个条目多一次磁盘往返
+  if (entry.offset + 30 + nameLength > boundary) {
     invalid()
   }
-  const view = viewOf(await readBytes(file, entry.offset, 30))
-  const nameLength = view.getUint16(26, true)
-  const extraLength = view.getUint16(28, true)
+  const header = viewOf(await readBytes(file, entry.offset, 30 + nameLength))
+  const extraLength = header.getUint16(28, true)
   const start = entry.offset + 30 + nameLength + extraLength
   const end = start + entry.compressedSize
   if (
-    view.getUint32(0, true) !== 0x04034b50 ||
-    view.getUint16(6, true) !== entry.flags ||
-    view.getUint16(8, true) !== entry.method ||
-    nameLength !== entry.name.length ||
+    header.getUint32(0, true) !== 0x04034b50 ||
+    header.getUint16(6, true) !== entry.flags ||
+    header.getUint16(8, true) !== entry.method ||
+    header.getUint16(26, true) !== nameLength ||
     end > boundary
   ) {
     invalid()
@@ -199,17 +217,20 @@ const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
     [14, entry.crc],
     [18, entry.compressedSize],
     [22, entry.size],
-  ]) {
-    const actual = view.getUint32(position, true)
+  ] as const) {
+    const actual = header.getUint32(position, true)
     if (actual !== expected && (!(entry.flags & 8) || actual !== 0)) {
       invalid()
     }
   }
-  const metadata = await readBytes(file, entry.offset + 30, nameLength + extraLength)
-  if (entry.name.some((byte, index) => byte !== metadata[index])) {
-    invalid()
+  for (let index = 0; index < nameLength; index += 1) {
+    if (header.getUint8(30 + index) !== entry.name[index]) {
+      invalid()
+    }
   }
-  checkExtra(metadata.subarray(nameLength))
+  if (extraLength > 0) {
+    checkExtra(await readBytes(file, entry.offset + 30 + nameLength, extraLength))
+  }
   if (entry.flags & 8) {
     if (end + 12 > boundary) {
       invalid()
@@ -240,12 +261,12 @@ export type ArchiveEntry = {
  */
 /** 需要处理的条目总数（不含目录），用于导入进度 */
 export const countArchiveEntries = async (file: File): Promise<number> => {
-  const directory = await readDirectory(file)
+  const directory = await readDirectoryCached(file)
   return directory.entries.filter((entry) => !entry.path.endsWith('/')).length
 }
 
 export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
-  const directory = await readDirectory(file)
+  const directory = await readDirectoryCached(file)
   for (const [index, entry] of directory.entries.entries()) {
     const boundary = directory.entries[index + 1]?.offset ?? directory.offset
     const start = await readEntryOffset(file, entry, boundary)
