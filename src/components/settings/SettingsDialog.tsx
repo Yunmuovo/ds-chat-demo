@@ -653,16 +653,26 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
         }
       })
       // 在 APK（WebView）里，blob 链接不会被下载，改为交给原生保存
-      const saver = (window as unknown as { AndroidSaver?: { save(n: string, m: string, d: string): void } })
-        .AndroidSaver
+      const saver = (
+        window as unknown as {
+          AndroidSaver?: {
+            save(n: string, m: string, d: string): void
+            log?(m: string): void
+          }
+        }
+      ).AndroidSaver
       if (saver?.save) {
+        saver.log?.(`打包完成 ${(blob.size / 1048576).toFixed(1)}MB，开始转码`)
         const reader = new FileReader()
         reader.onloadend = () => {
+          saver.log?.('转码完成，交给系统保存')
           saver.save(name, blob.type || 'application/zip', String(reader.result))
         }
+        reader.onerror = () => saver.log?.('转码失败：' + (reader.error?.name ?? 'unknown'))
         reader.readAsDataURL(blob)
         return
       }
+      saver?.log?.('未检测到 App 保存接口，尝试浏览器下载')
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url

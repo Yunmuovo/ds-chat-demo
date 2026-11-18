@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
@@ -34,6 +35,12 @@ public class FileSaver {
     private void toast(String message) {
         new Handler(Looper.getMainLooper()).post(
                 () -> Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+    }
+
+    /** 页面用来报告进度的轻量日志，直接弹 toast，方便定位导出卡在哪一步 */
+    @JavascriptInterface
+    public void log(String message) {
+        toast("[导出] " + message);
     }
 
     @JavascriptInterface
@@ -69,6 +76,7 @@ public class FileSaver {
                 values.put(MediaStore.Downloads.IS_PENDING, 0);
                 resolver.update(uri, values, null, null);
                 toast("已保存到「下载」：" + name);
+                openDownloadsFolder(name);
                 showActions(uri, mime, name);
             } else {
                 File dir = new File(Environment.getExternalStoragePublicDirectory(
@@ -85,6 +93,22 @@ public class FileSaver {
         } catch (Exception error) {
             toast("导出失败：" + error.getClass().getSimpleName());
         }
+    }
+
+    /** 尽力打开系统「下载」目录；打不开就保留 toast 提示 */
+    private void openDownloadsFolder(String name) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Uri folder = Uri.parse(
+                    "content://com.android.externalstorage.documents/document/primary%3ADownload");
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(folder, DocumentsContract.Document.MIME_TYPE_DIR);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                context.startActivity(intent);
+            } catch (Exception error) {
+                toast("文件已保存到「下载」：" + name);
+            }
+        });
     }
 
     /** 导出成功后直接弹出系统的分享/发送面板，省得去文件管理器里翻 */
