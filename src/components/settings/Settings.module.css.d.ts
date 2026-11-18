@@ -11,6 +11,10 @@ declare const styles: {
   readonly "label": string;
   readonly "uploadButton": string;
   readonly "backupSection": string;
+  readonly "backupHeader": string;
+  readonly "backupHeaderRight": string;
+  readonly "backupUsage": string;
+
   readonly "backupTitle": string;
   readonly "backupEmpty": string;
   readonly "backupRow": string;
