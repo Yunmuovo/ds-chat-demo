@@ -21,16 +21,24 @@
         #boot-splash { background: #16171c; }
       }
 
+      /* 初始不可见：等页面测量到欢迎页 logo 的真实位置后再淡入，避免任何位移 */
       #boot-splash-logo {
         width: 44px;
         height: 44px;
         opacity: 0;
-        transform: scale(0.94);
-        animation: boot-logo-in 0.42s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+        transition: opacity 0.28s ease;
+        will-change: transform, opacity;
       }
 
-      @keyframes boot-logo-in {
-        to { opacity: 1; transform: scale(1); }
+      /* 呼吸一下，停留约 0.7s，让人看清 */
+      #boot-splash-logo.boot-visible {
+        opacity: 1;
+        animation: boot-breathe 0.9s ease-in-out;
+      }
+
+      @keyframes boot-breathe {
+        0%, 100% { scale: 1; }
+        45% { scale: 1.06; }
       }
 
       #boot-splash.boot-hide {
