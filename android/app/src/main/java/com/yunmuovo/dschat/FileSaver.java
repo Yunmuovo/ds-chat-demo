@@ -23,16 +23,12 @@ import java.io.OutputStream;
 public class FileSaver {
 
     private final Context context;
-    private final BackupStore backups;
-    private final android.webkit.WebView webView;
     private File tempFile;
     private FileOutputStream tempOut;
     private long received;
 
-    public FileSaver(Context context, BackupStore backups, android.webkit.WebView webView) {
+    public FileSaver(Context context) {
         this.context = context.getApplicationContext();
-        this.backups = backups;
-        this.webView = webView;
     }
 
     private void toast(String message) {
@@ -89,13 +85,20 @@ public class FileSaver {
             closeQuietly();
             String name = sanitize(fileName);
             String mime = mimeType == null || mimeType.isEmpty() ? "application/zip" : mimeType;
-            File target = backups.uniqueFile(name);
-            if (backups.copyInto(tempFile, target)) {
-                toast("已保存到 App 备份：" + target.getName() + "（" + (received / 1048576) + "MB）");
-                webView.post(() -> webView.evaluateJavascript(
-                        "window.__dsBackupsChanged&&window.__dsBackupsChanged()", null));
+            boolean saved = saveToDownloads(tempFile, name, mime);
+            if (saved) {
+                toast("已保存到「下载」：" + name + "（" + (received / 1048576) + "MB）");
             } else {
-                toast("导出失败：无法写入备份目录");
+                // 兜底：放到 App 自己的外部目录，至少文件不丢
+                File dir = new File(context.getExternalFilesDir(null), "exports");
+                if (dir.exists() || dir.mkdirs()) {
+                    File target = new File(dir, name);
+                    if (copy(tempFile, target)) {
+                        toast("已保存到：" + target.getAbsolutePath());
+                        return;
+                    }
+                }
+                toast("导出失败：无法写入文件");
             }
         } catch (Throwable error) {
             toast("导出失败：" + error.getClass().getSimpleName() + " " + error.getMessage());
