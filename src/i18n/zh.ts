@@ -133,8 +133,6 @@ export const zh = {
   historyImportFiles: '正在写入附件 {done}/{total}',
   historyImportPrepare: '正在检查文件…',
   backupTitle: '备份文件',
-  backupUsage: '备份 {backups}MB · 缓存 {cache}MB',
-  backupClearCache: '清理缓存',
   backupEmpty: '还没有备份，点「导出」会存到这里',
   backupRestore: '恢复',
   backupShare: '分享',

@@ -42,18 +42,6 @@ public class BackupStore {
                 () -> Toast.makeText(context, message, Toast.LENGTH_LONG).show());
     }
 
-    /** 清理上次异常中断残留的导出临时文件 */
-    void cleanupTemp() {
-        File[] files = context.getCacheDir()
-                .listFiles((d, n) -> n.startsWith("export-") && n.endsWith(".zip"));
-        if (files != null) {
-            for (File file : files) {
-                //noinspection ResultOfMethodCallIgnored
-                file.delete();
-            }
-        }
-    }
-
     private File dir() {
         File dir = new File(context.getExternalFilesDir(null), "backups");
         if (!dir.exists() && !dir.mkdirs()) {
@@ -95,63 +83,6 @@ public class BackupStore {
         } catch (Throwable error) {
             return "[]";
         }
-    }
-
-    /** 备份与缓存占用（字节），用于设置页展示 */
-    @JavascriptInterface
-    public String usage() {
-        try {
-            JSONObject result = new JSONObject();
-            result.put("backups", directorySize(dir()));
-            result.put("cache", directorySize(context.getCacheDir()));
-            result.put("count", countBackups());
-            return result.toString();
-        } catch (Throwable error) {
-            return "{}";
-        }
-    }
-
-    /** 清理导出临时文件与 WebView 缓存 */
-    @JavascriptInterface
-    public void clearCache() {
-        try {
-            File cache = context.getCacheDir();
-            File[] files = cache.listFiles((d, n) -> n.startsWith("export-") && n.endsWith(".zip"));
-            long total = 0;
-            if (files != null) {
-                for (File file : files) {
-                    long size = file.length();
-                    if (file.delete()) {
-                        total += size;
-                    }
-                }
-            }
-            final long freed = total;
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (webView != null) {
-                    webView.clearCache(true);
-                }
-                toast("已清理 " + (freed / 1048576) + "MB 临时文件与网页缓存");
-            });
-        } catch (Throwable error) {
-            toast("清理失败：" + error.getClass().getSimpleName());
-        }
-    }
-
-    private static long directorySize(File dir) {
-        long total = 0;
-        File[] files = dir.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                total += file.isDirectory() ? directorySize(file) : file.length();
-            }
-        }
-        return total;
-    }
-
-    private int countBackups() {
-        File[] files = dir().listFiles((d, n) -> n.endsWith(".zip"));
-        return files == null ? 0 : files.length;
     }
 
     @JavascriptInterface

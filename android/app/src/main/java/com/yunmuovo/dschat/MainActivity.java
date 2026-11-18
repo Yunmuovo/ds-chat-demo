@@ -151,7 +151,6 @@ public class MainActivity extends Activity {
 
         // 网页导出的 ZIP 是 blob: 链接，WebView 不会自己下载，交给页面转成 base64 再保存
         backupStore = new BackupStore(this, webView);
-        backupStore.cleanupTemp();
         fileSaver = new FileSaver(this, backupStore, webView);
         webView.addJavascriptInterface(fileSaver, "AndroidSaver");
         webView.addJavascriptInterface(backupStore, "AndroidBackup");

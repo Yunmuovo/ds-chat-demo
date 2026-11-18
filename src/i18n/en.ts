@@ -139,8 +139,6 @@ export const en = {
   historyImportFiles: 'Writing attachments {done}/{total}',
   historyImportPrepare: 'Checking file...',
   backupTitle: 'Backups',
-  backupUsage: 'Backups {backups}MB · Cache {cache}MB',
-  backupClearCache: 'Clear cache',
   backupEmpty: 'No backups yet. Exports are stored here.',
   backupRestore: 'Restore',
   backupShare: 'Share',

@@ -609,8 +609,6 @@ type BackupBridge = {
   share(name: string): void
   remove(name: string): boolean
   restore(name: string): void
-  usage(): string
-  clearCache(): void
 }
 
 declare global {
@@ -628,7 +626,6 @@ const backupBridge = () =>
 /** App 内备份仓库：列出导出的文件，可分享、删除，或直接读取后走导入流程恢复 */
 const useBackups = (onRestore: (file: File) => void) => {
   const [items, setItems] = useState<BackupItem[]>([])
-  const [usage, setUsage] = useState({ backups: 0, cache: 0 })
   const [restoring, setRestoring] = useState<string | null>(null)
   const chunks = useRef<Uint8Array[]>([])
   const onRestoreRef = useRef(onRestore)
@@ -643,11 +640,6 @@ const useBackups = (onRestore: (file: File) => void) => {
       setItems(JSON.parse(bridge.list() || '[]') as BackupItem[])
     } catch {
       setItems([])
-    }
-    try {
-      setUsage(JSON.parse(bridge.usage() || '{}') as { backups: number; cache: number })
-    } catch {
-      setUsage({ backups: 0, cache: 0 })
     }
   }, [])
 
@@ -692,10 +684,6 @@ const useBackups = (onRestore: (file: File) => void) => {
   }, [refresh])
 
   const share = (name: string) => backupBridge()?.share(name)
-  const clearCache = () => {
-    backupBridge()?.clearCache()
-    window.setTimeout(refresh, 600)
-  }
   const remove = (name: string) => {
     backupBridge()?.remove(name)
     refresh()
@@ -706,7 +694,7 @@ const useBackups = (onRestore: (file: File) => void) => {
     backupBridge()?.restore(name)
   }
 
-  return { items, usage, restoring, share, remove, restore, clearCache, refresh }
+  return { items, restoring, share, remove, restore, refresh }
 }
 
 /** 备份文件列表：导出就近存放在 App 内，恢复时不需要去文件管理器找 */
@@ -717,20 +705,7 @@ const BackupList = ({ backups }: { backups: ReturnType<typeof useBackups> }) => 
   }
   return (
     <div className={styles.backupSection}>
-      <div className={styles.backupHeader}>
-        <div className={styles.backupTitle}>{t('backupTitle')}</div>
-        <div className={styles.backupHeaderRight}>
-          <span className={styles.backupUsage}>
-            {t('backupUsage', {
-              backups: (backups.usage.backups / 1048576).toFixed(1),
-              cache: (backups.usage.cache / 1048576).toFixed(1),
-            })}
-          </span>
-          <Button variant="outlined" size="s" onClick={backups.clearCache}>
-            {t('backupClearCache')}
-          </Button>
-        </div>
-      </div>
+      <div className={styles.backupTitle}>{t('backupTitle')}</div>
       {backups.items.length === 0 ? (
         <div className={styles.backupEmpty}>{t('backupEmpty')}</div>
       ) : (
