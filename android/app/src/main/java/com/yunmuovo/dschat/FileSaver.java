@@ -48,11 +48,19 @@ public class FileSaver {
             pendingBytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
             pendingName = sanitize(fileName);
             String mime = mimeType == null || mimeType.isEmpty() ? "application/zip" : mimeType;
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType(mime);
-            intent.putExtra(Intent.EXTRA_TITLE, pendingName);
-            activity.startActivityForResult(intent, REQUEST_SAVE_FILE);
+            // JS 接口运行在 WebView 的后台线程，必须在主线程启动界面，否则弹不出对话框
+            new Handler(Looper.getMainLooper()).post(() -> {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType(mime);
+                intent.putExtra(Intent.EXTRA_TITLE, pendingName);
+                try {
+                    activity.startActivityForResult(intent, REQUEST_SAVE_FILE);
+                } catch (Exception error) {
+                    toast("打开保存对话框失败：" + error.getClass().getSimpleName()
+                            + " " + error.getMessage());
+                }
+            });
         } catch (Exception error) {
             toast("导出失败：" + error.getClass().getSimpleName());
         }
