@@ -134,7 +134,6 @@ export const zh = {
   historyImportPrepare: '正在检查文件…',
   backupTitle: '备份文件',
   backupUsage: '备份 {backups}MB · 缓存 {cache}MB',
-  backupData: '聊天数据 {size}MB',
   backupClearCache: '清理缓存',
   backupEmpty: '还没有备份，点「导出」会存到这里',
   backupRestore: '恢复',

@@ -140,7 +140,6 @@ export const en = {
   historyImportPrepare: 'Checking file...',
   backupTitle: 'Backups',
   backupUsage: 'Backups {backups}MB · Cache {cache}MB',
-  backupData: 'Chat data {size}MB',
   backupClearCache: 'Clear cache',
   backupEmpty: 'No backups yet. Exports are stored here.',
   backupRestore: 'Restore',
