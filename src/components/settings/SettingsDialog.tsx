@@ -63,6 +63,7 @@ const SettingsContent = () => {
   // 切换分组不丢失正在输入的 API Key 与导入状态
   const apiKeyEditor = useApiKeyEditor()
   const historyImport = useHistoryImport()
+  const backups = useBackups((file) => historyImport.select(file))
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
@@ -107,6 +108,7 @@ const SettingsContent = () => {
               <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
+              <BackupList backups={backups} />
               <SettingCell
                 label={t('deleteAllSessions')}
                 status={null}
@@ -591,6 +593,151 @@ const useHistoryImport = () => {
     confirm,
     cancelImport,
   }
+}
+
+
+type BackupItem = { name: string; size: number; time: number }
+
+const formatDateTime = (time: number) => {
+  const date = new Date(time)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+type BackupBridge = {
+  list(): string
+  share(name: string): void
+  remove(name: string): boolean
+  restore(name: string): void
+}
+
+declare global {
+  interface Window {
+    __dsBackupsChanged?: () => void
+    __dsBackupChunk?: (index: number, length: number, base64: string) => void
+    __dsBackupDone?: (total: number, name: string) => void
+    __dsBackupError?: (reason: string) => void
+  }
+}
+
+const backupBridge = () =>
+  (window as unknown as { AndroidBackup?: BackupBridge }).AndroidBackup
+
+/** App 内备份仓库：列出导出的文件，可分享、删除，或直接读取后走导入流程恢复 */
+const useBackups = (onRestore: (file: File) => void) => {
+  const [items, setItems] = useState<BackupItem[]>([])
+  const [restoring, setRestoring] = useState<string | null>(null)
+  const chunks = useRef<Uint8Array[]>([])
+  const onRestoreRef = useRef(onRestore)
+  onRestoreRef.current = onRestore
+
+  const refresh = useCallback(() => {
+    const bridge = backupBridge()
+    if (!bridge) {
+      return
+    }
+    try {
+      setItems(JSON.parse(bridge.list() || '[]') as BackupItem[])
+    } catch {
+      setItems([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!backupBridge()) {
+      return
+    }
+    refresh()
+    window.__dsBackupsChanged = () => refresh()
+    window.__dsBackupChunk = (_index: number, _length: number, base64: string) => {
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index)
+      }
+      chunks.current.push(bytes)
+    }
+    window.__dsBackupDone = (_total: number, name: string) => {
+      const size = chunks.current.reduce((sum, part) => sum + part.length, 0)
+      const merged = new Uint8Array(size)
+      let offset = 0
+      for (const part of chunks.current) {
+        merged.set(part, offset)
+        offset += part.length
+      }
+      chunks.current = []
+      setRestoring(null)
+      onRestoreRef.current(new File([merged], name, { type: 'application/zip' }))
+    }
+    window.__dsBackupError = (reason: string) => {
+      chunks.current = []
+      setRestoring(null)
+      // eslint-disable-next-line no-console
+      console.error('[backup] restore failed', reason)
+    }
+    return () => {
+      window.__dsBackupsChanged = undefined
+      window.__dsBackupChunk = undefined
+      window.__dsBackupDone = undefined
+      window.__dsBackupError = undefined
+    }
+  }, [refresh])
+
+  const share = (name: string) => backupBridge()?.share(name)
+  const remove = (name: string) => {
+    backupBridge()?.remove(name)
+    refresh()
+  }
+  const restore = (name: string) => {
+    chunks.current = []
+    setRestoring(name)
+    backupBridge()?.restore(name)
+  }
+
+  return { items, restoring, share, remove, restore, refresh }
+}
+
+/** 备份文件列表：导出就近存放在 App 内，恢复时不需要去文件管理器找 */
+const BackupList = ({ backups }: { backups: ReturnType<typeof useBackups> }) => {
+  const t = useTranslate()
+  if (!backupBridge()) {
+    return null
+  }
+  return (
+    <div className={styles.backupSection}>
+      <div className={styles.backupTitle}>{t('backupTitle')}</div>
+      {backups.items.length === 0 ? (
+        <div className={styles.backupEmpty}>{t('backupEmpty')}</div>
+      ) : (
+        backups.items.map((item) => (
+          <div key={item.name} className={styles.backupRow}>
+            <div className={styles.backupInfo}>
+              <div className={styles.backupName}>{item.name}</div>
+              <div className={styles.backupMeta}>
+                {(item.size / 1048576).toFixed(1)}MB · {formatDateTime(item.time)}
+              </div>
+            </div>
+            <div className={styles.backupActions}>
+              <Button
+                variant="outlined"
+                size="s"
+                disabled={Boolean(backups.restoring)}
+                onClick={() => backups.restore(item.name)}
+              >
+                {backups.restoring === item.name ? t('backupRestoring') : t('backupRestore')}
+              </Button>
+              <Button variant="outlined" size="s" onClick={() => backups.share(item.name)}>
+                {t('backupShare')}
+              </Button>
+              <Button variant="outlined" size="s" onClick={() => backups.remove(item.name)}>
+                {t('backupDelete')}
+              </Button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
 }
 
 /** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */

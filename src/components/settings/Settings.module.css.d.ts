@@ -10,6 +10,14 @@ declare const styles: {
   readonly "text": string;
   readonly "label": string;
   readonly "uploadButton": string;
+  readonly "backupSection": string;
+  readonly "backupTitle": string;
+  readonly "backupEmpty": string;
+  readonly "backupRow": string;
+  readonly "backupInfo": string;
+  readonly "backupName": string;
+  readonly "backupMeta": string;
+  readonly "backupActions": string;
   readonly "importProgress": string;
   readonly "importProgressTrack": string;
   readonly "importProgressFill": string;

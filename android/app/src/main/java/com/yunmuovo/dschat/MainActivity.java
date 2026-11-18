@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private ProgressBar splashBar;
     private ValueCallback<Uri[]> fileCallback;
     private FileSaver fileSaver;
+    private BackupStore backupStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,8 +150,10 @@ public class MainActivity extends Activity {
         });
 
         // 网页导出的 ZIP 是 blob: 链接，WebView 不会自己下载，交给页面转成 base64 再保存
-        fileSaver = new FileSaver(this);
+        backupStore = new BackupStore(this, webView);
+        fileSaver = new FileSaver(this, backupStore, webView);
         webView.addJavascriptInterface(fileSaver, "AndroidSaver");
+        webView.addJavascriptInterface(backupStore, "AndroidBackup");
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) -> {
             if (url != null && url.startsWith("blob:")) {
