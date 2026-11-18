@@ -10,29 +10,31 @@ android {
         applicationId = "com.yunmuovo.dschat"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
     }
 
     // 固定签名：密钥由 CI 首次构建时生成并提交，保证后续版本可以覆盖安装
+    // 注意路径在 android/ 下（根工程），不在 app 模块里
+    val keystoreFile = rootProject.file("keystore.jks")
+
     signingConfigs {
-        if (file("keystore.jks").exists()) {
-            create("stable") {
-                storeFile = file("keystore.jks")
-                storePassword = "dschat2024"
-                keyAlias = "dschat"
-                keyPassword = "dschat2024"
-            }
+        create("stable") {
+            check(keystoreFile.exists()) { "缺少签名密钥：android/keystore.jks" }
+            storeFile = keystoreFile
+            storePassword = "dschat2024"
+            keyAlias = "dschat"
+            keyPassword = "dschat2024"
         }
     }
 
     buildTypes {
         debug {
-            signingConfigs.findByName("stable")?.let { signingConfig = it }
+            signingConfig = signingConfigs.getByName("stable")
         }
         release {
             isMinifyEnabled = false
-            signingConfigs.findByName("stable")?.let { signingConfig = it }
+            signingConfig = signingConfigs.getByName("stable")
         }
     }
 
