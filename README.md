@@ -50,3 +50,14 @@ bash build.sh   # 构建 + 部署到手机目录 + 同步 docs/
 - 这是开源 demo 的自部署版本，不是官方产品，请保留 LICENSE（MIT）。
 - 没有账号体系：谁拿到地址都能用，数据只存在各自浏览器的 IndexedDB / localStorage 里，互不相通。
 - 换域名或端口 = 换数据源，旧地址的对话不会自动迁移；搬迁请用「设置 → 数据管理 → 导出所有历史对话」。
+
+## Android APK
+
+`android/` 是一个最小的 WebView 外壳工程：App 打开时加载线上站点，网页更新后无需重新发版。
+
+构建不需要本地装 Android SDK —— 推送到 `main` 且改动涉及 `android/` 时，GitHub Actions 会自动
+编译 debug APK，在 Actions 页面的 `ds-chat-demo-apk` 产物里下载。
+
+- 站点地址写在 `android/app/src/main/java/com/yunmuovo/dschat/MainActivity.java` 的 `HOME_URL`
+- 默认 debug 签名，可直接安装（需允许“未知来源”）
+- 更换图标：替换 `android/app/src/main/res/mipmap-*/ic_launcher.png`
