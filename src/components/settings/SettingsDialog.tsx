@@ -460,6 +460,16 @@ const ThemeSetting = () => {
 /** `reason` 为失败原因的文案 key，展示时按当前语言翻译后填入 `message` 参数。 */
 type Status = (TranslationMessage & { error?: boolean; reason?: TranslationKey }) | null
 
+/** 分块转 base64：分段拼接，避免超长参数导致栈溢出 */
+const toBase64 = (bytes: Uint8Array): string => {
+  let binary = ''
+  const step = 0x8000
+  for (let index = 0; index < bytes.length; index += step) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + step))
+  }
+  return btoa(binary)
+}
+
 /** 导出失败附带原因：预期的错误用对应文案作原因，其他错误用错误信息。 */
 const errorStatus = (key: TranslationKey, error: unknown): Status => ({
   key,
@@ -652,24 +662,30 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
           setProgress({ done, total })
         }
       })
-      // 在 APK（WebView）里，blob 链接不会被下载，改为交给原生保存
+      // 在 APK（WebView）里，blob 链接不会被下载：分块传给原生边收边写，
+      // 避免把整个压缩包转成一条超大 base64 字符串（低内存会 OOM）。
+      const mime = blob.type || 'application/zip'
       const saver = (
         window as unknown as {
           AndroidSaver?: {
-            save(n: string, m: string, d: string): void
+            begin(n: string, size: number): void
+            append(base64: string): void
+            finish(n: string, mime: string): void
             log?(m: string): void
           }
         }
       ).AndroidSaver
-      if (saver?.save) {
-        saver.log?.(`打包完成 ${(blob.size / 1048576).toFixed(1)}MB，开始转码`)
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          saver.log?.('转码完成，交给系统保存')
-          saver.save(name, blob.type || 'application/zip', String(reader.result))
+      if (saver?.begin && saver.append && saver.finish) {
+        setProgress({ done: 0, total: 0 })
+        saver.log?.(`打包完成 ${(blob.size / 1048576).toFixed(1)}MB，开始分块传输`)
+        saver.begin(name, blob.size)
+        const chunkSize = 512 * 1024
+        for (let offset = 0; offset < blob.size; offset += chunkSize) {
+          const bytes = new Uint8Array(await blob.slice(offset, offset + chunkSize).arrayBuffer())
+          saver.append(toBase64(bytes))
+          await new Promise((resolve) => setTimeout(resolve, 0))
         }
-        reader.onerror = () => saver.log?.('转码失败：' + (reader.error?.name ?? 'unknown'))
-        reader.readAsDataURL(blob)
+        saver.finish(name, mime)
         return
       }
       saver?.log?.('未检测到 App 保存接口，尝试浏览器下载')

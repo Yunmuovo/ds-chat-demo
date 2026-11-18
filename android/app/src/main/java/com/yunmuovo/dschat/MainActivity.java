@@ -154,11 +154,11 @@ public class MainActivity extends Activity {
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, length) -> {
             if (url != null && url.startsWith("blob:")) {
-                startBlobDownload(url, mimeType, fileNameFromDisposition(contentDisposition));
+                Toast.makeText(this, "请用「导出所有历史对话」保存文件", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (url != null && url.startsWith("data:")) {
-                fileSaver.save("deepseek_data.zip", mimeType, url);
+            if (url != null && (url.startsWith("data:") || url.startsWith("blob:"))) {
+                Toast.makeText(this, "请用「导出所有历史对话」保存文件", Toast.LENGTH_SHORT).show();
                 return;
             }
             openExternally(Uri.parse(url));
@@ -331,12 +331,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == FileSaver.REQUEST_SAVE_FILE) {
-            if (fileSaver != null) {
-                fileSaver.onResult(resultCode, data);
-            }
-            return;
-        }
         if (requestCode != REQUEST_FILE_CHOOSER || fileCallback == null) {
             return;
         }
