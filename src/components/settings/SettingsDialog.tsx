@@ -629,6 +629,7 @@ const backupBridge = () =>
 const useBackups = (onRestore: (file: File) => void) => {
   const [items, setItems] = useState<BackupItem[]>([])
   const [usage, setUsage] = useState({ backups: 0, cache: 0 })
+  const [dataSize, setDataSize] = useState(0)
   const [restoring, setRestoring] = useState<string | null>(null)
   const chunks = useRef<Uint8Array[]>([])
   const onRestoreRef = useRef(onRestore)
@@ -649,6 +650,11 @@ const useBackups = (onRestore: (file: File) => void) => {
     } catch {
       setUsage({ backups: 0, cache: 0 })
     }
+    // 浏览器侧的存储用量（IndexedDB 里的对话与图片）
+    void navigator.storage
+      ?.estimate()
+      .then((estimate) => setDataSize(estimate.usage ?? 0))
+      .catch(() => setDataSize(0))
   }, [])
 
   useEffect(() => {
@@ -706,7 +712,7 @@ const useBackups = (onRestore: (file: File) => void) => {
     backupBridge()?.restore(name)
   }
 
-  return { items, usage, restoring, share, remove, restore, clearCache, refresh }
+  return { items, usage, dataSize, restoring, share, remove, restore, clearCache, refresh }
 }
 
 /** 备份文件列表：导出就近存放在 App 内，恢复时不需要去文件管理器找 */
@@ -725,6 +731,8 @@ const BackupList = ({ backups }: { backups: ReturnType<typeof useBackups> }) => 
               backups: (backups.usage.backups / 1048576).toFixed(1),
               cache: (backups.usage.cache / 1048576).toFixed(1),
             })}
+            {' · '}
+            {t('backupData', { size: (backups.dataSize / 1048576).toFixed(1) })}
           </span>
           <Button variant="outlined" size="s" onClick={backups.clearCache}>
             {t('backupClearCache')}
