@@ -3,18 +3,27 @@ package com.yunmuovo.dschat;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AlphaAnimation;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 /**
@@ -29,6 +38,9 @@ public class MainActivity extends Activity {
     private static final int REQUEST_FILE_CHOOSER = 1001;
 
     private WebView webView;
+    private FrameLayout splash;
+    private TextView splashText;
+    private ProgressBar splashBar;
     private ValueCallback<Uri[]> fileCallback;
 
     @Override
@@ -42,7 +54,13 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        webView.setBackgroundColor(Color.WHITE);
         root.addView(webView);
+
+        splash = buildSplash();
+        root.addView(splash, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         setContentView(root);
 
         WebSettings settings = webView.getSettings();
@@ -66,6 +84,27 @@ public class MainActivity extends Activity {
                     return true;
                 }
                 return false;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                hideSplash();
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request,
+                                        WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    showLoadError("无法连接：" + error.getDescription());
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request,
+                                            android.webkit.WebResourceResponse response) {
+                if (request.isForMainFrame()) {
+                    showLoadError("服务器返回 " + response.getStatusCode() + "，请稍后重试");
+                }
             }
         });
 
@@ -96,7 +135,87 @@ public class MainActivity extends Activity {
             webView.loadUrl(HOME_URL);
         } else {
             webView.restoreState(savedInstanceState);
+            hideSplash();
         }
+    }
+
+    /** 加载中盖一层：鲸鱼图标 + 转圈 + 文案，避免白屏让人以为卡住 */
+    private FrameLayout buildSplash() {
+        FrameLayout box = new FrameLayout(this);
+        box.setBackgroundColor(Color.WHITE);
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        float density = getResources().getDisplayMetrics().density;
+        int iconSize = (int) (88 * density);
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.mipmap.ic_launcher);
+        column.addView(icon, new LinearLayout.LayoutParams(iconSize, iconSize));
+
+        splashBar = new ProgressBar(this);
+        LinearLayout.LayoutParams barParams =
+                new LinearLayout.LayoutParams((int) (32 * density), (int) (32 * density));
+        barParams.topMargin = (int) (28 * density);
+        column.addView(splashBar, barParams);
+
+        splashText = new TextView(this);
+        splashText.setText("正在加载…");
+        splashText.setTextColor(Color.parseColor("#8A8F99"));
+        splashText.setTextSize(13);
+        LinearLayout.LayoutParams textParams =
+                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+        textParams.topMargin = (int) (10 * density);
+        column.addView(splashText, textParams);
+
+        FrameLayout.LayoutParams columnParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        columnParams.gravity = Gravity.CENTER;
+        box.addView(column, columnParams);
+        return box;
+    }
+
+    private void hideSplash() {
+        if (splash == null || splash.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        AlphaAnimation fade = new AlphaAnimation(1f, 0f);
+        fade.setDuration(220);
+        fade.setFillAfter(true);
+        splash.startAnimation(fade);
+        splash.setVisibility(View.GONE);
+    }
+
+    /** 加载失败：停掉转圈，给出原因，点一下重试 */
+    private void showLoadError(String message) {
+        if (splash == null) {
+            return;
+        }
+        splash.setVisibility(View.VISIBLE);
+        splash.setAlpha(1f);
+        splash.clearAnimation();
+        if (splashBar != null) {
+            splashBar.setVisibility(View.GONE);
+        }
+        if (splashText != null) {
+            splashText.setText(message + "\n\n轻触屏幕重试");
+            splashText.setTextColor(Color.parseColor("#4D6BFE"));
+            splashText.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+            splashText.setGravity(Gravity.CENTER);
+        }
+        splash.setOnClickListener(v -> {
+            if (splashBar != null) {
+                splashBar.setVisibility(View.VISIBLE);
+            }
+            if (splashText != null) {
+                splashText.setText("正在加载…");
+                splashText.setTextColor(Color.parseColor("#8A8F99"));
+            }
+            splash.setOnClickListener(null);
+            webView.loadUrl(HOME_URL);
+        });
     }
 
     /** 用系统浏览器打开外部链接与下载 */
