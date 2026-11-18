@@ -238,6 +238,12 @@ export type ArchiveEntry = {
  * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
  * 调用方必须消费完当前条目的数据，再请求下一个条目。
  */
+/** 需要处理的条目总数（不含目录），用于导入进度 */
+export const countArchiveEntries = async (file: File): Promise<number> => {
+  const directory = await readDirectory(file)
+  return directory.entries.filter((entry) => !entry.path.endsWith('/')).length
+}
+
 export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
   const directory = await readDirectory(file)
   for (const [index, entry] of directory.entries.entries()) {

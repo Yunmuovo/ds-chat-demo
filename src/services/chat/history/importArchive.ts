@@ -1,4 +1,6 @@
 import * as db from '../db.js'
+import type { StoredFile } from '../db.js'
+import type { Session } from '../types.js'
 import { BackupError, fail } from './errors.js'
 import type { SessionIndexEntry } from './format.js'
 import { INDEX_PATH, MANIFEST_PATH, USER_PATH, parseSessionPath, sessionFilesDir } from './paths.js'
@@ -6,12 +8,39 @@ import { checkManifest, readSessionFile, readSessionIndex } from './schema.js'
 import { toLocalSession } from './toLocal.js'
 import {
   ArchiveError,
+  countArchiveEntries,
   isZipFile,
   readArchive,
   readEntry,
   skipEntry,
   type ArchiveEntry,
 } from './zipReader.js'
+
+/** 导入阶段：读会话 → 写附件 → 合并进正式库 */
+export type ImportStage = 'sessions' | 'files' | 'merge'
+
+export type ImportProgress = {
+  stage: ImportStage
+  /** 已处理的归档条目数 */
+  done: number
+  /** 归档条目总数 */
+  total: number
+}
+
+export type ImportOptions = {
+  onProgress?: (progress: ImportProgress) => void
+  signal?: AbortSignal
+}
+
+/** 每批写入的会话数；图片按批写入，单条太大容易拖慢事务 */
+const SESSION_BATCH = 25
+const FILE_BATCH = 8
+
+const checkAborted = (signal: AbortSignal | undefined) => {
+  if (signal?.aborted) {
+    throw new DOMException('Import aborted', 'AbortError')
+  }
+}
 
 /** 从原件字节补充图片 MIME；无法识别时为空字符串，图片身份仍由归档的 is_image 决定。 */
 const imageType = (bytes: Uint8Array): string => {
@@ -78,10 +107,14 @@ export const checkArchiveFormat = async (file: File): Promise<void> => {
  * 会话读完立即暂存，只保留图片路径映射；图片全部读完后逐会话回填 MIME，不改变图片身份。
  * 写入导入暂存存储；调用方负责先清空暂存，成功后替换正式数据，失败时清理暂存。
  */
-export const importArchive = async (file: File): Promise<void> => {
+export const importArchive = async (
+  file: File,
+  { onProgress, signal }: ImportOptions = {}
+): Promise<Map<string, string>> => {
   if (!(await isZipFile(file))) {
     fail('backupUnrecognized')
   }
+  const total = await countArchiveEntries(file)
   const imported = new Set<string>()
   const images = new Map<string, string>()
   /** 已保存的原件：文件 ID → MIME。同一图片出现在多个会话目录时只保存一次。 */
@@ -89,6 +122,31 @@ export const importArchive = async (file: File): Promise<void> => {
   let manifest = false
   let index: SessionIndexEntry[] | undefined
   let currentSessionId: string | undefined
+  let done = 0
+
+  // 批量缓冲：读满一批再写库，把事务数从「每条一个」降到「每批一个」
+  let sessionBatch: Session[] = []
+  let fileBatch: StoredFile[] = []
+
+  const flushSessions = async () => {
+    if (sessionBatch.length === 0) {
+      return
+    }
+    const batch = sessionBatch
+    sessionBatch = []
+    await db.addStagingSessions(batch)
+  }
+
+  const flushFiles = async () => {
+    if (fileBatch.length === 0) {
+      return
+    }
+    const batch = fileBatch
+    fileBatch = []
+    await db.saveStagingFiles(batch)
+  }
+
+  const report = (stage: ImportStage) => onProgress?.({ stage, done, total })
 
   const saveImage = async (entry: ArchiveEntry, id: string) => {
     if (stored.has(id)) {
@@ -97,12 +155,16 @@ export const importArchive = async (file: File): Promise<void> => {
     }
     const data = await readEntry(entry)
     const type = imageType(new Uint8Array(await data.slice(0, 16).arrayBuffer()))
-    await db.saveStagingFiles([{ id, blob: new Blob([data], { type }) }])
+    fileBatch.push({ id, blob: new Blob([data], { type }) })
     stored.set(id, type)
+    if (fileBatch.length >= FILE_BATCH) {
+      await flushFiles()
+    }
   }
 
   try {
     for await (const entry of readArchive(file)) {
+      checkAborted(signal)
       const { path } = entry
       const sessionId = parseSessionPath(path)
       if (!manifest) {
@@ -124,7 +186,10 @@ export const importArchive = async (file: File): Promise<void> => {
         for (const [imagePath, id] of local.images) {
           images.set(imagePath, id)
         }
-        await db.addStagingSession(local.session)
+        sessionBatch.push(local.session)
+        if (sessionBatch.length >= SESSION_BATCH) {
+          await flushSessions()
+        }
       } else if (path === INDEX_PATH && !index) {
         index = readSessionIndex(await readJson(entry))
       } else if (
@@ -138,7 +203,11 @@ export const importArchive = async (file: File): Promise<void> => {
       } else {
         fail('backupIncomplete')
       }
+      done += 1
+      report(index ? 'files' : 'sessions')
     }
+    await flushSessions()
+    await flushFiles()
   } catch (error) {
     throw error instanceof ArchiveError ? new BackupError('backupIncomplete') : error
   }
@@ -155,5 +224,6 @@ export const importArchive = async (file: File): Promise<void> => {
   ) {
     fail('backupIncomplete')
   }
-  await db.updateStagingFileTypes(stored)
+  onProgress?.({ stage: 'merge', done: total, total })
+  return stored
 }

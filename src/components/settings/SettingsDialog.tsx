@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -15,6 +15,7 @@ import {
   exportHistory,
   importHistory,
 } from '../../services/chat/backup.js'
+import type { ImportProgress } from '../../services/chat/history/importArchive.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
@@ -127,6 +128,7 @@ const SettingsContent = () => {
         </div>
       </Modal>
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
+      {historyImport.busy ? <ImportProgressModal historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
   )
@@ -315,6 +317,50 @@ const TtsVoiceSetting = () => {
 }
 
 /** 覆盖导入的二次确认，叠在设置弹窗上 */
+/** 导入中：显示阶段进度并可取消；取消只会中断本次导入，原有数据不受影响。 */
+const ImportProgressModal = ({
+  historyImport,
+}: {
+  historyImport: ReturnType<typeof useHistoryImport>
+}) => {
+  const t = useTranslate()
+  const { progress } = historyImport
+  const percent =
+    progress && progress.total > 0
+      ? Math.min(100, Math.round((progress.done / progress.total) * 100))
+      : 0
+  const label = !progress
+    ? t('historyImportMerge')
+    : progress.stage === 'sessions'
+      ? t('historyImportSessions', { done: progress.done, total: progress.total })
+      : progress.stage === 'files'
+        ? t('historyImportFiles', { done: progress.done, total: progress.total })
+        : t('historyImportMerge')
+
+  return (
+    <Modal
+      title={t('historyImport')}
+      className={styles.importConfirm}
+      onClose={historyImport.cancelImport}
+      footer={
+        <Button variant="outlined" size="m" onClick={historyImport.cancelImport}>
+          {t('historyImportCancel')}
+        </Button>
+      }
+    >
+      <div className={styles.importProgress}>
+        <div className={styles.importProgressTrack}>
+          <div
+            className={styles.importProgressFill}
+            style={{ width: `${progress?.stage === 'merge' ? 100 : percent}%` }}
+          />
+        </div>
+        <div className={styles.importProgressText}>{label}</div>
+      </div>
+    </Modal>
+  )
+}
+
 const ImportConfirm = ({
   historyImport,
 }: {
@@ -436,12 +482,45 @@ const SettingCell = ({
   )
 }
 
+/** 导入进度：阶段变化或每帧最多更新一次，避免高频 setState 拖慢导入 */
+const useImportProgress = () => {
+  const [progress, setProgress] = useState<ImportProgress | null>(null)
+  const frame = useRef(0)
+  const pending = useRef<ImportProgress | null>(null)
+
+  const onProgress = useCallback((next: ImportProgress) => {
+    pending.current = next
+    if (frame.current) {
+      return
+    }
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0
+      if (pending.current) {
+        setProgress(pending.current)
+      }
+    })
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (frame.current) {
+        cancelAnimationFrame(frame.current)
+      }
+    },
+    []
+  )
+
+  return { progress, onProgress, reset: () => setProgress(null) }
+}
+
 /** 选文件后先提示覆盖；确认后才检查文件并执行导入，任何错误都提示导入失败。 */
 const useHistoryImport = () => {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
   const importing = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
+  const { progress, onProgress, reset: resetProgress } = useImportProgress()
 
   const confirm = async () => {
     if (!file || importing.current) {
@@ -451,18 +530,37 @@ const useHistoryImport = () => {
     setFile(null)
     setBusy(true)
     setStatus(null)
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      const count = await importHistory(file)
+      const count = await importHistory(file, { onProgress, signal: controller.signal })
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
-    } catch {
-      setStatus({ key: 'historyImportFailed', error: true })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setStatus({ key: 'historyImportCancelled' })
+      } else {
+        setStatus({ key: 'historyImportFailed', error: true })
+      }
     } finally {
       importing.current = false
+      abortRef.current = null
+      resetProgress()
       setBusy(false)
     }
   }
 
-  return { file, busy, status, select: setFile, cancel: () => setFile(null), confirm }
+  const cancelImport = () => abortRef.current?.abort()
+
+  return {
+    file,
+    busy,
+    status,
+    progress,
+    select: setFile,
+    cancel: () => setFile(null),
+    confirm,
+    cancelImport,
+  }
 }
 
 /** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */

@@ -135,6 +135,11 @@ export const en = {
   apiKeyInvalid: 'Invalid API Key. Please check it and try again.',
   apiKeyVerificationFailed: 'Verification failed: {message}',
   historyImport: 'Import chat history',
+  historyImportSessions: 'Reading chats {done}/{total}',
+  historyImportFiles: 'Writing attachments {done}/{total}',
+  historyImportMerge: 'Merging data...',
+  historyImportCancel: 'Cancel import',
+  historyImportCancelled: 'Import cancelled',
   historyImportConfirm: 'Import',
   historyImportConfirmTitle: 'Import chat history?',
   historyImportConfirmDescription:

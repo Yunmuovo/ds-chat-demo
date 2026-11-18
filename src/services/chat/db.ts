@@ -189,48 +189,53 @@ export const clearStaging = async (): Promise<void> => {
   ])
 }
 
-export const addStagingSession = async (session: Session): Promise<void> => {
-  await (await getDB()).add('sessionsStaging', session)
+/** 批量写入暂存会话：一次事务写完一批，避免每条一个事务的开销 */
+export const addStagingSessions = async (sessions: Session[]): Promise<void> => {
+  if (sessions.length === 0) {
+    return
+  }
+  const tx = (await getDB()).transaction('sessionsStaging', 'readwrite')
+  await Promise.all([...sessions.map((session) => tx.store.put(session)), tx.done])
 }
 
 export const saveStagingFiles = (files: StoredFile[]): Promise<void> =>
   putFiles('filesStaging', files)
 
-/** 图片位于会话 JSON 之后；全部读完后回填具体 MIME，保留归档给出的 isImage 标识。 */
-export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>): Promise<void> => {
-  const tx = (await getDB()).transaction('sessionsStaging', 'readwrite')
-  await Promise.all([
-    (async () => {
-      for (let cursor = await tx.store.openCursor(); cursor; cursor = await cursor.continue()) {
-        const session = cursor.value
-        let changed = false
-        for (const message of session.messages) {
-          if (message.role !== 'user') {
-            continue
-          }
-          for (const file of message.files) {
-            const type = types.get(file.id) ?? ''
-            if (file.mimeType !== type) {
-              file.mimeType = type
-              changed = true
-            }
-          }
-        }
-        if (changed) {
-          await cursor.update(session)
-        }
+/** 复制会话时用导入阶段算出的 MIME 覆盖占位值，省掉一遍全表回填 */
+const withFileTypes =
+  (types: ReadonlyMap<string, string> | undefined) =>
+  (session: Session): Session => {
+    if (!types || types.size === 0) {
+      return session
+    }
+    let changed = false
+    const messages = session.messages.map((message) => {
+      if (message.role !== 'user' || message.files.length === 0) {
+        return message
       }
-    })(),
-    tx.done,
-  ])
-}
+      let filesChanged = false
+      const files = message.files.map((file) => {
+        const type = types.get(file.id)
+        if (type === undefined || type === file.mimeType) {
+          return file
+        }
+        filesChanged = true
+        return { ...file, mimeType: type }
+      })
+      if (!filesChanged) {
+        return message
+      }
+      changed = true
+      return { ...message, files }
+    })
+    return changed ? { ...session, messages } : session
+  }
 
-/**
- * 导入完成后用暂存替换正式数据：同一事务中替换会话、摘要和原件，并清空暂存。
- * 逐条游标复制，同一时间只读取一条记录；事务失败时整体回滚，正式数据不变。
- */
-export const commitStaging = async (): Promise<SessionSummary[]> => {
+export const commitStaging = async (
+  fileTypes?: ReadonlyMap<string, string>
+): Promise<SessionSummary[]> => {
   const summaries: SessionSummary[] = []
+  const patchTypes = withFileTypes(fileTypes)
   const tx = (await getDB()).transaction(
     ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'],
     'readwrite'
@@ -247,9 +252,10 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
         cursor;
         cursor = await cursor.continue()
       ) {
-        await target.put(cursor.value)
+        const value = to === 'sessions' ? patchTypes(cursor.value as Session) : cursor.value
+        await target.put(value)
         if (to === 'sessions') {
-          const summary = storedSummary(cursor.value as Session)
+          const summary = storedSummary(value as Session)
           await tx.objectStore('sessionSummaries').put(summary)
           summaries.push(toSessionSummary(summary))
         }
