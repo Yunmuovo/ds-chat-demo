@@ -122,11 +122,13 @@ public class FileSaver {
                 if (uri == null) {
                     return false;
                 }
-                try (OutputStream out = resolver.openOutputStream(uri)) {
-                    if (out == null) {
-                        return false;
+                try (java.io.InputStream in = new java.io.FileInputStream(source)) {
+                    try (OutputStream out = resolver.openOutputStream(uri)) {
+                        if (out == null) {
+                            return false;
+                        }
+                        copy(in, out);
                     }
-                    copy(source, out);
                 }
                 values.clear();
                 values.put(MediaStore.Downloads.IS_PENDING, 0);
