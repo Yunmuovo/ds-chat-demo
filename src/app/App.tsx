@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { finishBootSplash } from './bootSplash.js'
 import { useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
@@ -60,6 +61,15 @@ export const App = () => {
 
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])
+
+  // 首屏渲染完成后收尾开屏：logo 平移到欢迎页位置再淡出
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      // 等一帧，确保欢迎页 logo 已完成布局
+      requestAnimationFrame(finishBootSplash)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
   useEffect(bindChatPersistence, [])
 
   // 搜索结果面板只属于当前会话

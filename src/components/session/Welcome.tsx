@@ -25,7 +25,7 @@ export const Welcome = () => {
       {isMobile ? <MobileHeader /> : null}
       <div className={styles.welcome}>
         <div className={styles.hero}>
-          <img className={styles.logoMark} src={logoMark} alt='' />
+          <img className={styles.logoMark} src={logoMark} alt='' data-welcome-logo />
           <div className={styles.greeting}>{t(greeting)}</div>
         </div>
         <ChatInput sessionId={null} />
