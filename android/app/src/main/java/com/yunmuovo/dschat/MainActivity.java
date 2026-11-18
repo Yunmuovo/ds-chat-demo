@@ -35,7 +35,13 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
 
     /** 站点地址；换域名只改这里 */
+    /** 站点地址；换域名只改这里 */
     private static final String HOME_URL = "https://yunmuovo.github.io/ds-chat-demo/";
+
+    /** 带上版本号作为查询参数：避免 WebView 一直用缓存的旧页面，导致新功能不生效 */
+    private static String homeUrl() {
+        return HOME_URL + "?app=" + BuildConfig.VERSION_NAME;
+    }
 
     private static final int REQUEST_FILE_CHOOSER = 1001;
 
@@ -157,7 +163,7 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState == null) {
-            webView.loadUrl(HOME_URL);
+            webView.loadUrl(homeUrl());
         } else {
             webView.restoreState(savedInstanceState);
             hideSplash();
@@ -257,7 +263,7 @@ public class MainActivity extends Activity {
                 splashText.setTextColor(Color.parseColor("#8A8F99"));
             }
             splash.setOnClickListener(null);
-            webView.loadUrl(HOME_URL);
+            webView.loadUrl(homeUrl());
         });
     }
 

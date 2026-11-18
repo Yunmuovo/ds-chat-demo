@@ -10,8 +10,8 @@ android {
         applicationId = "com.yunmuovo.dschat"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.9"
+        versionCode = 11
+        versionName = "1.10"
     }
 
     // 固定签名：密钥由 CI 首次构建时生成并提交，保证后续版本可以覆盖安装
@@ -36,6 +36,11 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("stable")
         }
+    }
+
+    buildFeatures {
+        // 外壳用 BuildConfig.VERSION_NAME 给页面地址加版本参数，避免加载缓存旧页面
+        buildConfig = true
     }
 
     compileOptions {
