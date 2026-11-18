@@ -32,20 +32,3 @@
   -webkit-user-drag: none;
   cursor: zoom-in;
 }
-
-.close {
-  position: absolute;
-  top: max(16px, env(safe-area-inset-top));
-  right: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background-color: rgb(255 255 255 / 14%);
-  color: #fff;
-  cursor: pointer;
-}

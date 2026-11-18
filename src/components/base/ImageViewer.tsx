@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { closeImageViewer, useImageViewer } from './imageViewerState.js'
-import { IconCloseFill14 } from './icons.js'
 import styles from './ImageViewer.module.css'
 
 const MIN_SCALE = 1
@@ -226,9 +225,6 @@ export const ImageViewer = () => {
       aria-label={name || t('close')}
       onClick={closeImageViewer}
     >
-      <button type="button" className={styles.close} aria-label={t('close')} onClick={closeImageViewer}>
-        <IconCloseFill14 />
-      </button>
       <div
         ref={stageRef}
         className={styles.stage}
@@ -237,7 +233,13 @@ export const ImageViewer = () => {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onWheel={onWheel}
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          // 点图片本身不关闭；点图片以外的黑色区域关闭（放大时同样有效）
+          if (event.target === stageRef.current) {
+            closeImageViewer()
+          }
+          event.stopPropagation()
+        }}
       >
         <img
           ref={imageRef}
