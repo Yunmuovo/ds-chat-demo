@@ -72,11 +72,10 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
-        // 跟随页面的 viewport 布局，并按 100% 字号渲染：
-        // 否则系统字体放大后文字被放大，底部开关会因放不下而收起文字只留图标。
+        // 跟随页面的 viewport 布局；字号仍跟随系统设置（无障碍），
+        // 界面在字号变大时会自动缩成短标签，而不是丢掉文字。
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
-        settings.setTextZoom(100);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override

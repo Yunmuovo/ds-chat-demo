@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
@@ -58,22 +58,41 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
 
+  // 空间不够时先缩成短标签，再不够才只剩图标；有余量时逐级恢复
+  const [labelMode, setLabelMode] = useState<'full' | 'short' | 'icon'>('full')
+
   useLayoutEffect(() => {
     const toggles = togglesRef.current
     if (!toggles) {
       return
     }
 
-    const updateLabels = () => {
-      toggles.classList.remove(styles.collapsedToggles)
-      toggles.classList.toggle(styles.collapsedToggles, toggles.scrollWidth > toggles.clientWidth)
+    const measure = () => {
+      const overflow = toggles.scrollWidth > toggles.clientWidth + 1
+      // 留出一点余量再恢复，避免在临界宽度来回抖动
+      const roomy = toggles.scrollWidth < toggles.clientWidth - 80
+      setLabelMode((mode) => {
+        if (overflow && mode === 'full') {
+          return 'short'
+        }
+        if (overflow && mode === 'short') {
+          return 'icon'
+        }
+        if (roomy && mode === 'short') {
+          return 'full'
+        }
+        if (roomy && mode === 'icon') {
+          return 'short'
+        }
+        return mode
+      })
     }
 
-    updateLabels()
-    const observer = new ResizeObserver(updateLabels)
+    measure()
+    const observer = new ResizeObserver(measure)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t])
+  }, [t, labelMode])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
@@ -212,7 +231,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               onClick={() => setThinking(!thinking)}
             >
               <IconThinkOutline14 />
-              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
+              {labelMode === 'icon' ? null : (
+                <span className={styles.toggleLabel}>
+                  {t(labelMode === 'short' ? 'thinkingSwitchShort' : 'thinkingSwitch')}
+                </span>
+              )}
             </button>
           </Tooltip>
           <Tooltip content={t('deactivatedSearchTooltip')}>
@@ -224,7 +247,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               onClick={() => setSearch(!search)}
             >
               <IconGlobeLanguageOutline14 />
-              <span className={styles.toggleLabel}>{t('search')}</span>
+              {labelMode === 'icon' ? null : (
+                <span className={styles.toggleLabel}>
+                  {t(labelMode === 'short' ? 'searchShort' : 'search')}
+                </span>
+              )}
             </button>
           </Tooltip>
         </div>

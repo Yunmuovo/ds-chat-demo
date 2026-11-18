@@ -251,10 +251,6 @@
   min-width: 0;
 }
 
-.collapsedToggles .toggleLabel {
-  display: none;
-}
-
 .toggle {
   display: inline-flex;
   flex-shrink: 0;
@@ -274,7 +270,7 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  transition-property: border, background;
+  transition-property: border, background, padding;
   transition-duration: 0.2s;
 
   &:hover:not(:disabled) {
