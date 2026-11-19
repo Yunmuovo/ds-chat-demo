@@ -1,7 +1,7 @@
 # ds-chat-demo
 
 基于 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo) 改造的 DeepSeek 聊天界面。
-纯静态网页，没有后端：打开网页、在设置里填自己的 API Key 就能用。
+打开网页、在设置里填自己的 API Key 就能用。
 
 ## 直接使用
 
@@ -10,6 +10,7 @@
 
 首次打开会弹出「设置 → 数据管理」，在最上面填入 API Key
 （在 [platform.deepseek.com](https://platform.deepseek.com) 申请）。Key 只存在你自己的浏览器里。
+也可以选择安装release最新的apk。
 
 ## 相比原版改了什么
 
@@ -26,7 +27,6 @@
 - **审核档位**：`safety_check` 调整为 `low`
 - **旧内核兼容**：内置 `toReversed / toSorted / toSpliced` 补丁，Chrome 109 也能正常发送
 - **抽屉手势**：从左往右滑出侧栏，跟手拖动、松手吸附
-- **欢迎页**：随机问候语
 
 ## 本地开发
 
@@ -61,15 +61,3 @@ bash build.sh   # 构建 + 部署到手机目录 + 同步 docs/
 - 站点地址写在 `android/app/src/main/java/com/yunmuovo/dschat/MainActivity.java` 的 `HOME_URL`
 - 默认 debug 签名，可直接安装（需允许“未知来源”）
 - 更换图标：替换 `android/app/src/main/res/mipmap-*/ic_launcher.png`
-
-### 2.0.0（纪念版）
-
-- Image viewer: pinch to zoom, drag to pan, double tap to toggle zoom, wheel zoom on desktop
-- New splash: logo fades in place, breathes, then the whole screen fades out
-- Cold start: logo appears after 260ms, "loading" hint only after 1.2s, cache-first WebView
-
-### 签名与升级
-
-APK 用固定密钥签名（`android/keystore.jks`，由 CI 首次构建时生成并提交），
-因此后续版本可以直接覆盖安装。**首次从「每次构建随机签名」的旧版切换过来时，
-需要卸载旧版一次**，否则会提示“与已安装应用签名不同”。
